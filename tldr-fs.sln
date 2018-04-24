@@ -1,6 +1,11 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".paket", ".paket", "{32E28C30-3BDF-44CD-A32F-D30098524175}"
+	ProjectSection(SolutionItems) = preProject
+		paket.dependencies = paket.dependencies
+	EndProjectSection
+EndProject
 Project("{f2a71f9b-5d33-465a-a702-920d77279786}") = "tldr-fs", "tldr-fs\tldr-fs.fsproj", "{1EF3C688-AE0C-444C-BC62-513076ED2867}"
 EndProject
 Global
