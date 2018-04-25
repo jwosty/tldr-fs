@@ -17,38 +17,39 @@ let dataDir = Path.Combine [|homeDir; "tldr-fs"|]
 let [<Literal>] indexJsonUri = "https://tldr.sh/assets/index.json"
 let [<Literal>] pagesArchiveUri = "https://tldr.sh/assets/tldr.zip"
 
-type Packages = JsonProvider<indexJsonUri>
+module PackageInfo =
+    type Packages = JsonProvider<indexJsonUri>
 
-let packageIndex = lazy (Packages.Load indexJsonUri)
-let packageIndexMap = lazy (
-    packageIndex.Force().Commands
-    |> Seq.map (fun cmd -> cmd.Name.String.Value, cmd.Platform)
-    |> Map.ofSeq)
+    let packageIndex = lazy (Packages.Load indexJsonUri)
+    let packageIndexMap = lazy (
+        packageIndex.Force().Commands
+        |> Seq.map (fun cmd -> cmd.Name.String.Value, cmd.Platform)
+        |> Map.ofSeq)
 
-let listAllPackages (packageIndexCommands: Packages.Command seq) =
-    for command in packageIndexCommands do
-        match command.Name.String with
-        | Some command -> printf "%s, " command
-        | None -> printf "(bad json: '%A'), " command.Name.JsonValue
-    Console.SetCursorPosition(Console.CursorLeft - 2, Console.CursorTop)
-    printfn "  "
+    let listAllPackages (packageIndexCommands: Packages.Command seq) =
+        for command in packageIndexCommands do
+            match command.Name.String with
+            | Some command -> printf "%s, " command
+            | None -> printf "(bad json: '%A'), " command.Name.JsonValue
+        Console.SetCursorPosition(Console.CursorLeft - 2, Console.CursorTop)
+        printfn "  "
 
-let listPackage package platform =
-    use archiveStream = Http.RequestStream(pagesArchiveUri).ResponseStream
-    use archive = new ZipArchive(archiveStream, ZipArchiveMode.Read)
-    let pkEntry =
-        archive.Entries |> Seq.tryPick (fun arc ->
-            if Path.GetFileNameWithoutExtension arc.FullName = package then
-                let entPlatform = Path.GetFileName (Path.GetDirectoryName arc.FullName)
-                if platform = entPlatform then Some (arc, platform)
-                else None
-            else None)
-    match pkEntry with
-    | Some (pkEntry, platform) ->
-        use mdStream = pkEntry.Open ()
-        use sr = new StreamReader(mdStream)
-        printfn "Found documentation for package '%s' for '%s':\n%s" package platform (sr.ReadToEnd ())
-    | None -> raise (GenericException "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr")
+    let listPackage package platform =
+        use archiveStream = Http.RequestStream(pagesArchiveUri).ResponseStream
+        use archive = new ZipArchive(archiveStream, ZipArchiveMode.Read)
+        let pkEntry =
+            archive.Entries |> Seq.tryPick (fun arc ->
+                if Path.GetFileNameWithoutExtension arc.FullName = package then
+                    let entPlatform = Path.GetFileName (Path.GetDirectoryName arc.FullName)
+                    if platform = entPlatform then Some (arc, platform)
+                    else None
+                else None)
+        match pkEntry with
+        | Some (pkEntry, platform) ->
+            use mdStream = pkEntry.Open ()
+            use sr = new StreamReader(mdStream)
+            printfn "Found documentation for package '%s' for '%s':\n%s" package platform (sr.ReadToEnd ())
+        | None -> raise (GenericException "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr")
 
 module CLI =
     type CLIArgs =
