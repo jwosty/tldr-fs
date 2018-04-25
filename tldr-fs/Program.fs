@@ -34,21 +34,24 @@ module PackageInfo =
         Console.SetCursorPosition(Console.CursorLeft - 2, Console.CursorTop)
         printfn "  "
 
-    let listPackage package platform =
+    let fetchPackageMarkdown package preferredPlatform =
         use archiveStream = Http.RequestStream(pagesArchiveUri).ResponseStream
         use archive = new ZipArchive(archiveStream, ZipArchiveMode.Read)
-        let pkEntry =
-            archive.Entries |> Seq.tryPick (fun arc ->
-                if Path.GetFileNameWithoutExtension arc.FullName = package then
-                    let entPlatform = Path.GetFileName (Path.GetDirectoryName arc.FullName)
-                    if platform = entPlatform then Some (arc, platform)
-                    else None
-                else None)
-        match pkEntry with
-        | Some (pkEntry, platform) ->
+        archive.Entries |> Seq.tryPick (fun arc ->
+            if Path.GetFileNameWithoutExtension arc.FullName = package then
+                let entPlatform = Path.GetFileName (Path.GetDirectoryName arc.FullName)
+                if preferredPlatform = entPlatform then Some (arc, preferredPlatform)
+                else None
+            else None)
+        |> Option.map (fun (pkEntry, platform) ->
             use mdStream = pkEntry.Open ()
             use sr = new StreamReader(mdStream)
-            printfn "Found documentation for package '%s' for '%s':\n%s" package platform (sr.ReadToEnd ())
+            platform, sr.ReadToEnd ())
+
+    let printPackagePage package preferredPlatform =
+        match fetchPackageMarkdown package preferredPlatform with
+        | Some (platform, md) ->
+            printfn "Found documentation for package '%s' for '%s':\n%s" package platform md
         | None -> raise (GenericException "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr")
 
 module CLI =
