@@ -5,6 +5,8 @@ open System.IO
 open System.IO.Compression
 open System.Runtime.InteropServices
 
+exception GenericException of string
+
 module String =
     let join (separator: string) (strings: string seq) = String.Join (separator, strings)    
 
@@ -24,7 +26,6 @@ let packageIndexMap = lazy (
     |> Map.ofSeq)
 
 let listAllPackages (packageIndexCommands: Packages.Command seq) =
-    // for command in packageIndex.Force().Commands do
     for command in packageIndexCommands do
         match command.Name.String with
         | Some command -> printf "%s, " command
@@ -47,7 +48,7 @@ let listPackage package platform =
         use mdStream = pkEntry.Open ()
         use sr = new StreamReader(mdStream)
         printfn "Found documentation for package '%s' for '%s':\n%s" package platform (sr.ReadToEnd ())
-    | None -> failwith "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr"
+    | None -> raise (GenericException "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr")
 
 module CLI =
     type CLIArgs =
@@ -76,11 +77,14 @@ module CLI =
             let platform =
                 match args.TryGetResult <@ Platform @>, currentPlatform with
                 | Some pl, _ | _, Some pl -> pl
-                | None, None -> failwith "Failed to detect platform and no explicit platform was given."
+                | None, None -> raise (GenericException "Failed to detect platform and no explicit platform was given.")
             args.TryGetResult <@ Package @> |> Option.iter (fun package -> listPackage package platform)
 
             0
         with
+        | GenericException msg ->
+            System.Console.Error.WriteLine msg
+            1
         | :? Argu.ArguParseException as e ->
             printfn "%s" (e.Message)
             1
