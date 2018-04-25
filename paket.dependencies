@@ -1,5 +1,6 @@
 source https://api.nuget.org/v3/index.json
 framework >= netcore2
 
+nuget Argu
 nuget FSharp.Core
 nuget FSharp.Data >= 3.0.0-beta3 beta
