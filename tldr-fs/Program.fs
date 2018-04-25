@@ -3,6 +3,7 @@ open FSharp.Data
 open System
 open System.IO
 open System.IO.Compression
+open System.Runtime.InteropServices
 
 module String =
     let join (separator: string) (strings: string seq) = String.Join (separator, strings)    
@@ -45,13 +46,13 @@ let listPackage package platform =
     | Some (pkEntry, platform) ->
         use mdStream = pkEntry.Open ()
         use sr = new StreamReader(mdStream)
-        printfn "Found documentation for package '%s':\n%s" package (sr.ReadToEnd ())
+        printfn "Found documentation for package '%s' for '%s':\n%s" package platform (sr.ReadToEnd ())
     | None -> failwith "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr"
 
 module CLI =
     type CLIArgs =
         | [<MainCommand; Unique>] Package of string
-        | Platform of string
+        | [<AltCommandLine "-p">] Platform of string
         | List_All
         interface IArgParserTemplate with
             member this.Usage =
@@ -65,12 +66,19 @@ module CLI =
     [<EntryPoint>]
     let main args =
         try
+            let currentPlatform =
+                [OSPlatform.Linux, "linux"; OSPlatform.OSX, "osx"; OSPlatform.Windows, "windows"]
+                |> List.tryPick (fun (pl, plName) -> if RuntimeInformation.IsOSPlatform pl then Some plName else None)
+
             let args = parser.Parse args
             let pi = packageIndex.Force()
             if args.Contains List_All then listAllPackages pi.Commands
-            let platform = args.GetResult <@ Platform @>
+            let platform =
+                match args.TryGetResult <@ Platform @>, currentPlatform with
+                | Some pl, _ | _, Some pl -> pl
+                | None, None -> failwith "Failed to detect platform and no explicit platform was given."
             args.TryGetResult <@ Package @> |> Option.iter (fun package -> listPackage package platform)
-            
+
             0
         with
         | :? Argu.ArguParseException as e ->
