@@ -17,18 +17,29 @@ let listAllPackages = async {
     Console.SetCursorPosition(Console.CursorLeft - 2, Console.CursorTop)
     printfn "  " }
 
-type CLIArgs =
-    | [<Unique>] List_All
-    interface IArgParserTemplate with
-        member this.Usage =
-            match this with
-            | List_All -> "list all packages in the package database."
+let listPackage package = async {
+    printfn "listing package: %s" package }
 
-let parser = ArgumentParser.Create<CLIArgs>(programName = "tldr-fs")
+module CLI =
+    type CLIArgs =
+        | [<MainCommand; Unique>] Package of string
+        | [<Unique>] List_All
+        interface IArgParserTemplate with
+            member this.Usage =
+                match this with
+                | Package _ -> "display the tldr page for a package"
+                | List_All -> "list all packages in the package database."
 
-[<EntryPoint>]
-let main args =
-    let args = parser.Parse args
-    if args.Contains List_All then
-        Async.RunSynchronously listAllPackages
-    0
+    let parser = ArgumentParser.Create<CLIArgs>(programName = "tldr-fs")
+
+    [<EntryPoint>]
+    let main args =
+        try
+            let args = parser.Parse args
+            if args.Contains List_All then Async.RunSynchronously listAllPackages
+            args.TryGetResult <@ Package @> |> Option.iter (Async.RunSynchronously << listPackage)
+            0
+        with
+        | :? Argu.ArguParseException as e ->
+            printfn "%s" (e.Message)
+            1
