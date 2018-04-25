@@ -76,13 +76,13 @@ module CLI =
                 |> List.tryPick (fun (pl, plName) -> if RuntimeInformation.IsOSPlatform pl then Some plName else None)
 
             let args = parser.Parse args
-            let pi = packageIndex.Force()
-            if args.Contains List_All then listAllPackages pi.Commands
+            let pi = PackageInfo.packageIndex.Force()
+            if args.Contains List_All then PackageInfo.listAllPackages pi.Commands
             let platform =
                 match args.TryGetResult <@ Platform @>, currentPlatform with
                 | Some pl, _ | _, Some pl -> pl
                 | None, None -> raise (GenericException "Failed to detect platform and no explicit platform was given.")
-            args.TryGetResult <@ Package @> |> Option.iter (fun package -> listPackage package platform)
+            args.TryGetResult <@ Package @> |> Option.iter (fun package -> PackageInfo.printPackagePage package platform)
 
             0
         with
