@@ -6,6 +6,7 @@ open System.IO.Compression
 open System.Runtime.InteropServices
 
 exception GenericException of string
+exception ArchiveException of string * exn
 
 module String =
     let join (separator: string) (strings: string seq) = String.Join (separator, strings)    
@@ -13,6 +14,8 @@ module String =
 // TODO: support Windows
 let homeDir = System.Environment.GetEnvironmentVariable "HOME"
 let dataDir = Path.Combine [|homeDir; "tldr-fs"|]
+let localIndex = Path.Combine [|dataDir; "pages/index.json"|]
+let pagesDir = Path.Combine [|dataDir; "pages"|]
 
 let [<Literal>] indexJsonUri = "https://tldr.sh/assets/index.json"
 let [<Literal>] pagesArchiveUri = "https://tldr.sh/assets/tldr.zip"
@@ -20,7 +23,17 @@ let [<Literal>] pagesArchiveUri = "https://tldr.sh/assets/tldr.zip"
 module PackageInfo =
     type Packages = JsonProvider<indexJsonUri>
 
-    let packageIndex = lazy (Packages.Load indexJsonUri)
+    let packageIndex = lazy (
+        try
+            let json = Packages.Load indexJsonUri
+            Directory.CreateDirectory (Path.GetDirectoryName localIndex) |> ignore
+            use file = File.OpenWrite localIndex
+            use writer = new StreamWriter(file)
+            json.JsonValue.WriteTo (writer, JsonSaveOptions.None)
+            json
+        with :? System.Net.WebException ->
+            Packages.Load ((new Uri(localIndex)).AbsoluteUri)
+        )
     let packageIndexMap = lazy (
         packageIndex.Force().Commands
         |> Seq.map (fun cmd -> cmd.Name.String.Value, cmd.Platform)
@@ -34,24 +47,17 @@ module PackageInfo =
         Console.SetCursorPosition(Console.CursorLeft - 2, Console.CursorTop)
         printfn "  "
 
-    let fetchPackageMarkdown package preferredPlatform =
-        use archiveStream = Http.RequestStream(pagesArchiveUri).ResponseStream
-        use archive = new ZipArchive(archiveStream, ZipArchiveMode.Read)
-        archive.Entries |> Seq.tryPick (fun arc ->
-            if Path.GetFileNameWithoutExtension arc.FullName = package then
-                let entPlatform = Path.GetFileName (Path.GetDirectoryName arc.FullName)
-                if preferredPlatform = entPlatform then Some (arc, preferredPlatform)
-                else None
-            else None)
-        |> Option.map (fun (pkEntry, platform) ->
-            use mdStream = pkEntry.Open ()
-            use sr = new StreamReader(mdStream)
-            platform, sr.ReadToEnd ())
+    let fetchPagesForPackage package =
+        Directory.EnumerateDirectories pagesDir
+        // it's GetFileName not GetDirectoryName because the latter only works when there's an ending slash
+        |> Seq.map (fun dir -> Path.GetFileName dir, Path.Combine [|dir; package + ".md"|])
+        |> Seq.choose (fun (platform, path) -> if File.Exists path then Some (platform, fun () -> File.ReadAllText path) else None)
 
     let printPackagePage package preferredPlatform =
-        match fetchPackageMarkdown package preferredPlatform with
-        | Some (platform, md) ->
-            printfn "Found documentation for package '%s' for '%s':\n%s" package platform md
+        let pages = fetchPagesForPackage package
+        let page = pages |> Seq.sortBy (function (pl, _) when pl = preferredPlatform -> 0 | ("common", _) -> 1 | _ -> 2) |> Seq.tryHead
+        match page with
+        | Some (platform, getText) -> printfn "Found '%s' page (%s):\n%s" package platform (getText ())
         | None -> raise (GenericException "This page doesn't exist yet! Submit new pages here: https://github.com/tldr-pages/tldr")
 
 module CLI =
